@@ -264,6 +264,6 @@ A KQL quick reference for the techniques used is in [`docs/kql-cheatsheet.md`](d
 
 ---
 
-*Scenario, data and story by [KC7 Cyber](https://kc7cyber.com); module authors Greg Schloemer and Simeon Kakpovi. Write-up, analysis and queries by Mazen Yousef.*
+*Scenario, data and story by [KC7 Cyber](https://kc7cyber.com)*
 
 *Author: Mazen Yousef | [LinkedIn](https://linkedin.com/in/mazenyousef) | [TryHackMe](https://tryhackme.com/p/mazen.yousef)*
