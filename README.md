@@ -8,7 +8,7 @@ Multi-threat SOC investigation at a fictional fintech company, Encryptodera Fina
 2. An **external actor** who took over that employee's still-active account, phished colleagues, moved laterally, dumped domain-admin credentials and used **Group Policy to ransom 306 machines**.
 3. A **second insider** quietly exfiltrating data over FTP to an accomplice planning to steal the company's crypto.
 
-> **Platform:** KC7 Cyber, module *Inside Encryptodera: An Insider Threat Scenario* (Advanced) · **Status:** completed, 88/88 questions, 3,990 points
+> **Platform:** KC7 Cyber, module *Inside Encryptodera: An Insider Threat Scenario* (Advanced) · 
 > **Tools:** Azure Data Explorer (Kusto) · KQL · MITRE ATT&CK
 
 ---
