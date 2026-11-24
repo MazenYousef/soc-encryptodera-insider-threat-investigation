@@ -1,0 +1,39 @@
+// Detection rules derived from this investigation
+
+// 1. Sign-ins by accounts of departed employees (feed from an HR leaver list; Barry as example)
+let leaver_accounts = Employees | where name in ("Barry Shmelly") | project username;
+AuthenticationEvents
+| where username in (leaver_accounts)
+| where timestamp > datetime(2024-01-18)   // leaving date
+| project timestamp, username, src_ip, hostname, result
+
+// 2. Double-extension executables (masquerading)
+FileCreationEvents
+| where filename matches regex @"\.(docx|xlsx|pdf|txt)\.exe$"
+
+// 3. Credential dumping: Mimikatz module names, whatever the binary is called
+ProcessEvents
+| where process_commandline has_any ("sekurlsa", "lsadump", "logonpasswords")
+
+// 4. Remote-access tools appearing on endpoints
+FileCreationEvents
+| where filename has_any ("screenconnect", "anydesk", "teamviewer")
+
+// 5. Discovery burst: several recon commands on one host within an hour
+ProcessEvents
+| where process_commandline has_any ("systeminfo", "nltest", "whoami", "net group")
+| summarize recon_cmds = dcount(process_commandline) by hostname, bin(timestamp, 1h)
+| where recon_cmds >= 2
+
+// 6. Domain admin used from a workstation that isn't an admin jump host
+AuthenticationEvents
+| where username endswith "_domain_admin"
+| where hostname !startswith "DOMAIN_CONTROLLER"
+| summarize hosts = make_set(hostname) by username
+
+// 7. Recurring outbound FTP to an external IP (scheduled exfiltration)
+NetworkFlow
+| where dest_port in (20, 21)
+| where not(ipv4_is_private(dest_ip))
+| summarize days = dcount(bin(timestamp, 1d)), total_bytes = sum(bytes) by src_ip, dest_ip
+| where days >= 5

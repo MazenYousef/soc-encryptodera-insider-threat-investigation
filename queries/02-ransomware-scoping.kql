@@ -1,0 +1,52 @@
+// Thread 2a - Ransomware: scope the impact and find patient zero
+// Tables: FileCreationEvents, ProcessEvents
+
+// How many machines show the ransom note, and when did it first appear?
+FileCreationEvents
+| where filename == "YOU_GOT_CRYTOED_SO_GIMME_CRYPTO.txt"
+| summarize hosts = dcount(hostname), first_seen = min(timestamp)
+
+// Patient zero: the first host with the note
+FileCreationEvents
+| where filename == "YOU_GOT_CRYTOED_SO_GIMME_CRYPTO.txt"
+| order by timestamp asc
+| take 1
+| project timestamp, hostname
+
+// Encrypted files on patient zero (extension .umadbro)
+FileCreationEvents
+| where hostname == "UL8R-MACHINE"
+| where filename endswith ".umadbro"
+| count
+
+// The command that did the encrypting
+ProcessEvents
+| where hostname == "UL8R-MACHINE"
+| where process_commandline has "umadbro"
+| project timestamp, process_commandline
+
+// When did the ransomware binary land?
+FileCreationEvents
+| where hostname == "UL8R-MACHINE"
+| where filename == "files_go_byebye.exe"
+| project timestamp, path, process_name
+
+// Temporal analysis: everything that ran on patient zero around the attack
+ProcessEvents
+| where hostname == "UL8R-MACHINE"
+| where timestamp between (datetime(2024-02-16) .. datetime(2024-02-18))
+| project timestamp, parent_process_name, process_commandline
+| order by timestamp asc
+
+// Decode the base64-encoded PowerShell (if output looks spaced out, it's UTF-16: decode in CyberChef)
+ProcessEvents
+| where hostname == "UL8R-MACHINE"
+| where process_commandline has_any ("-enc", "-EncodedCommand")
+| extend b64 = extract(@"(?i)-enc\w*\s+([A-Za-z0-9+/=]+)", 1, process_commandline)
+| extend decoded = base64_decode_tostring(b64)
+| project timestamp, decoded
+
+// Deployment mechanism: Group Policy refresh on every victim
+ProcessEvents
+| where process_commandline has "gpupdate /force"
+| summarize hosts = dcount(hostname)

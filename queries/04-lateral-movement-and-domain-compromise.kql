@@ -1,0 +1,70 @@
+// Thread 2c - Lateral movement, credential theft and domain compromise
+// Tables: ProcessEvents, AuthenticationEvents, Employees, Email, OutboundNetworkEvents, FileCreationEvents
+
+// Common login sources across every host where the actor ran discovery
+let hosts = ProcessEvents
+| where process_commandline has "systeminfo"
+| distinct hostname;
+AuthenticationEvents
+| where hostname in (hosts)
+| summarize hosts_logged_into = dcount(hostname) by src_ip
+| order by hosts_logged_into desc
+
+// Who owns that internal IP, and where did it log in?
+Employees
+| where ip_addr == "10.10.0.138"
+| project name, role, hostname
+
+AuthenticationEvents
+| where src_ip == "10.10.0.138"
+| where result has "Successful"
+| summarize logins = count(), hosts = make_set(hostname)
+
+// Domain controller logins: which account?
+AuthenticationEvents
+| where hostname == "DOMAIN_CONTROLLER_SERVER"
+| where src_ip == "10.10.0.138"
+| distinct username
+
+// Where else was the domain admin account used?
+AuthenticationEvents
+| where username == "lihenry_domain_admin"
+| distinct hostname
+
+// Credential dumping (renamed Mimikatz)
+ProcessEvents
+| where hostname == "GJ95-LAPTOP"
+| where process_commandline has "sekurlsa"
+| project timestamp, process_name, process_commandline
+
+// How did the actor reach GJ95-LAPTOP? Accounts that logged into it
+AuthenticationEvents
+| where hostname == "GJ95-LAPTOP"
+| summarize logins = count() by username
+
+AuthenticationEvents
+| where username == "systadmi_local_admin"
+| summarize hosts_attempted = dcount(hostname)
+
+// Non-IT users improperly using the local admin account (query provided in the scenario)
+let hosts = FileCreationEvents
+| where filename has "screenconnect"
+| distinct hostname;
+AuthenticationEvents
+| where hostname in (hosts)
+| where username has "systadmi"
+| where result has "Successful"
+| join (Employees | project ip_addr, role, email_addr, name) on $left.src_ip == $right.ip_addr
+| project SourceIpName = name, SourceIpUserRole = role, hostname, username, timestamp
+
+// Was Valerie phished, and did she click? (phish received, no click)
+let valerie = Employees | where name == "Valerie Orozco";
+let v_mail = toscalar(valerie | project email_addr);
+let v_ip = toscalar(valerie | project ip_addr);
+Email
+| where recipient == v_mail
+| where link has ".exe"
+| project timestamp, sender, subject, link;
+OutboundNetworkEvents
+| where src_ip == v_ip
+| where url has "Employee_Contact_List"

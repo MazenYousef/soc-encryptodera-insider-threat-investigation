@@ -1,0 +1,45 @@
+// Thread 1 - Insider threat: Barry Shmelly (disgruntled employee, data theft)
+// Tables: Employees, Email, OutboundNetworkEvents, FileCreationEvents, ProcessEvents
+
+// Who is Barry? Identity, IP, host and role
+Employees
+| where name == "Barry Shmelly"
+| project name, role, email_addr, ip_addr, hostname, username
+
+// Behavioural indicators: hostile emails in January
+Email
+| where sender == "barry_shmelly@encryptoderafinancial.com"
+| where timestamp between (datetime(2024-01-16) .. datetime(2024-01-19))
+| join kind=inner (Employees | project email_addr, recipient_name = name, recipient_role = role) on $left.recipient == $right.email_addr
+| project timestamp, recipient_name, recipient_role, subject
+| order by timestamp asc
+
+// Intent: research on moving sensitive data (web browsing from Barry's IP)
+let barry_ip = toscalar(Employees | where name == "Barry Shmelly" | project ip_addr);
+OutboundNetworkEvents
+| where src_ip == barry_ip
+| where url has_any ("transfer-sensitive-files", "7-zip", "USB-Flash-Drive")
+| project timestamp, url
+| order by timestamp asc
+
+// Collection: sensitive documents created on Barry's machine
+let barry_host = toscalar(Employees | where name == "Barry Shmelly" | project hostname);
+FileCreationEvents
+| where hostname == barry_host
+| where filename has_any ("SECRET", "Salary", "Proprietary")
+| project timestamp, filename, path, process_name
+| order by timestamp asc
+
+// Staging: password-protected archive (7-Zip with -p switch)
+let barry_host = toscalar(Employees | where name == "Barry Shmelly" | project hostname);
+ProcessEvents
+| where hostname == barry_host
+| where process_commandline has "7z"
+| project timestamp, process_commandline
+
+// Exfiltration: files written to removable media (E:\)
+let barry_host = toscalar(Employees | where name == "Barry Shmelly" | project hostname);
+FileCreationEvents
+| where hostname == barry_host
+| where path startswith @"E:\"
+| project timestamp, filename, path

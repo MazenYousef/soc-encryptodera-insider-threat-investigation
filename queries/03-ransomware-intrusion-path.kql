@@ -1,0 +1,56 @@
+// Thread 2b - Ransomware: walk the intrusion back to initial access
+// Tables: ProcessEvents, FileCreationEvents, Email, AuthenticationEvents, Employees
+
+// Discovery: where and when did the actor first run systeminfo?
+ProcessEvents
+| where process_commandline has "systeminfo"
+| summarize hosts = dcount(hostname), first_run = min(timestamp)
+
+ProcessEvents
+| where process_commandline has "systeminfo"
+| order by timestamp asc
+| take 1
+| project timestamp, hostname
+
+// Domain controller discovery on the first host
+ProcessEvents
+| where hostname == "41QI-LAPTOP"
+| where process_commandline has "nltest"
+| project timestamp, process_commandline
+
+// Masqueraded payload (double extension) and what it dropped next
+FileCreationEvents
+| where hostname == "41QI-LAPTOP"
+| where timestamp between (datetime(2024-02-01) .. datetime(2024-02-03))
+| where filename endswith ".exe"
+| project timestamp, filename, path
+| order by timestamp asc
+
+// How widespread is the remote-access tool?
+FileCreationEvents
+| where filename has "screenconnect"
+| summarize hosts = dcount(hostname), host_list = make_set(hostname)
+
+// Delivery: which email carried the payload link?
+Email
+| where link has ".xlsx.exe"
+| project timestamp, sender, recipient, subject, link
+
+// Unusual emails from Barry's account after he quit (18 Jan)
+Email
+| where sender == "barry_shmelly@encryptoderafinancial.com"
+| where timestamp >= datetime(2024-02-01)
+| project timestamp, recipient, subject, link
+| order by timestamp asc
+
+// Account takeover: where did Barry's account log in from on 1 Feb?
+let barry_user = toscalar(Employees | where name == "Barry Shmelly" | project username);
+AuthenticationEvents
+| where username == barry_user
+| where timestamp between (datetime(2024-02-01) .. datetime(2024-02-02))
+| project timestamp, src_ip, user_agent, result
+
+// Did that external IP touch any other account?
+AuthenticationEvents
+| where src_ip == "143.38.175.105"
+| summarize accounts = dcount(username)

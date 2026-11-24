@@ -1,0 +1,52 @@
+// Thread 3 - Insider threat: Jane Smith (data exfiltration over FTP, crypto theft)
+// Tables: NetworkFlow, Employees, OutboundNetworkEvents, Email, FileCreationEvents, ProcessEvents
+
+// Which destination received the most data on 5 Feb?
+NetworkFlow
+| where timestamp between (datetime(2024-02-05) .. datetime(2024-02-06))
+| summarize total_bytes = sum(bytes) by dest_ip
+| top 5 by total_bytes desc
+
+// Profile the flow: since when, how often, how much, which port, how many senders?
+NetworkFlow
+| where dest_ip == "182.56.23.121"
+| summarize first_seen = min(timestamp), active_days = dcount(bin(timestamp, 1d)),
+            total_bytes = sum(bytes), senders = dcount(src_ip) by dest_port
+
+// Who is the single sender?
+let senders = NetworkFlow
+| where dest_ip == "182.56.23.121"
+| distinct src_ip;
+Employees
+| where ip_addr in (senders)
+| project name, role, email_addr, ip_addr, hostname, username
+
+// Reconnaissance on the company website
+let jane_ip = toscalar(Employees | where name == "Jane Smith" | project ip_addr);
+OutboundNetworkEvents
+| where src_ip == jane_ip
+| where url has "encryptoderafinancial"
+| project timestamp, url
+| order by timestamp asc
+
+// Communication with an external accomplice
+let jane_mail = toscalar(Employees | where name == "Jane Smith" | project email_addr);
+Email
+| where sender == jane_mail or recipient == jane_mail
+| where sender !endswith "encryptoderafinancial.com" or recipient !endswith "encryptoderafinancial.com"
+| project timestamp, sender, recipient, subject
+| order by timestamp asc
+
+// Tooling: exfiltration and crypto-theft binaries
+let jane_host = toscalar(Employees | where name == "Jane Smith" | project hostname);
+FileCreationEvents
+| where hostname == jane_host
+| where filename in ("ftp_client.exe", "crypto_stealer.exe")
+| project timestamp, filename, path
+
+// Staging path, schedule and credentials in the exfil tool's command line
+let jane_host = toscalar(Employees | where name == "Jane Smith" | project hostname);
+ProcessEvents
+| where hostname == jane_host
+| where process_commandline has "ftp_client"
+| project timestamp, process_commandline
